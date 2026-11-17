@@ -2,53 +2,55 @@
 
 **Complementarity-Aware Representation Routing with Shared Graph Guidance for Multivariate Time Series Forecasting**
 
-论文目前正在审稿。本仓库提供共享图与上下文图的构建，以及双图卷积与空间分解（DGCSD）的 PyTorch 实现。
+The manuscript is under review (waiting...) ☀️
 
-## 共享图与上下文图
+This repository contains the PyTorch modules for shared and context-dependent graph construction and Dual Graph Convolution with Spatial Decomposition (DGCSD).
 
-传感器之间既有跨时间窗相对稳定的联系，也有随当前交通状态变化的联系。共享图提供跨窗口通用的关系参照，上下文图补充当前窗口的局部关系。
+## Shared and Context-dependent Graphs
 
-1. **共享图来自节点嵌入。** 模型在训练中为每个传感器学习一份节点嵌入，用嵌入之间的相似度构图并做行归一化。同一组模型参数下，各输入窗口使用同一张共享图。
-2. **上下文图来自当前历史窗口。** 先用共享图传播预处理后的历史数据，输入减去传播值后得到互补偏差。上下文图以这部分偏差为主要依据，用一阶时间差分调节共享节点信息的贡献，再根据所得节点表示计算边权。
+Some relationships between sensors persist across traffic windows, while others depend on the conditions in a particular window. CARR-SG models them with two graphs.
 
-[![Fig. 2 · 上下文图构建](assets/context_graph.png)](assets/DGCSD.pdf)
+1. **Shared graph.** The model learns one embedding per sensor during training. It computes similarities between the embeddings and normalizes the resulting edge weights by row. With fixed model parameters, the shared graph stays the same across input windows.
+2. **Context-dependent graph.** The model first propagates the preprocessed history over the shared graph, then subtracts the propagated signal from the input to obtain the complementary deviation. It builds the context-dependent graph primarily from that deviation, using first-order temporal differences to modulate the contribution of shared node information.
 
-[Fig. 2 PDF](assets/DGCSD.pdf) · [构图代码](core/graph_learning.py)
+[![Fig. 2. Context-dependent graph construction](assets/context_graph.png)](assets/DGCSD.pdf)
 
-## DGCSD 如何使用两种图
+[Fig. 2 PDF](assets/DGCSD.pdf) · [Graph construction code](core/graph_learning.py)
 
-构图后，DGCSD 接收两种图和待传播的隐藏表示。它用共享图将隐藏表示分成**共享图传播分量**与**互补分量**。前者沿共享图传播，后者沿上下文图传播。最后汇合各阶传播结果，并与原始隐藏表示一起投影，作为后续层的输入。
+## Dual Graph Convolution with Spatial Decomposition
 
-[![Fig. 3 · 双图卷积与空间分解](assets/DGCSD.png)](assets/context_graph.pdf)
+DGCSD takes both graphs and a hidden representation. It decomposes the representation into a shared-graph-propagated component and its complementary residual, then propagates each component over its corresponding graph. It combines the outputs from successive propagation steps with the original hidden representation and projects them for the next layer.
 
-[Fig. 3 PDF](assets/context_graph.pdf) · [传播代码](core/dgcsd.py)
+[![Fig. 3. Dual graph convolution with spatial decomposition](assets/DGCSD.png)](assets/context_graph.pdf)
 
-| 模块 | 输入 | 输出 |
+[Fig. 3 PDF](assets/context_graph.pdf) · [Propagation code](core/dgcsd.py)
+
+| Module | Input | Output |
 |---|---|---|
-| `DualGraphLearner` | 历史张量 `[B, C, N, T]` | 共享图 `[N, N]`，每个样本的上下文图 `[B, N, N]` |
-| `DGCSD` | 隐藏张量 `[B, C_in, N, T]` 和两种图 | 更新后的隐藏特征 `[B, C_out, N, T]` |
+| `DualGraphLearner` | Historical inputs `[B, C, N, T]` | Shared graph `[N, N]` and one context-dependent graph per sample `[B, N, N]` |
+| `DGCSD` | Hidden features `[B, C_in, N, T]` and both graphs | Updated hidden features `[B, C_out, N, T]` |
 
-`B` 为样本数，`C` 为通道数，`N` 为节点数，`T` 为时间步数。
+`B`, `C`, `N`, and `T` denote the batch size, number of channels, number of nodes, and number of time steps.
 
-## 运行演示
+## Run the Demo
 
-在仓库根目录运行。默认使用小规模合成输入，可直接在 CPU 上检查两个模块的调用。
+Run the following commands from the repository root. The default demo uses small synthetic tensors and runs on a CPU.
 
 ```bash
 python -m pip install -r requirements.txt
 python demo.py
 ```
 
-用仓库内的 [PEMS04.npz](data/PEMS04.npz) 运行真实流量演示。
+To run the same modules on real traffic observations, use the included [PEMS04.npz](data/PEMS04.npz).
 
 ```bash
 python demo.py --pems04 data/PEMS04.npz
 ```
 
-[示例](demo.py)读取开头两个不重叠的 12 步流量窗口，对每个节点在各自窗口内标准化，再构建一张共享图和每窗一张上下文图。为展示传播接口，它直接用标准化后的流量作为单通道节点特征。程序展示两张上下文图的差异、两个分支的一阶传播及 DGCSD 的输出形状。示例使用真实流量和随机初始化的参数（固定种子），演示到中间特征为止。
+[The demo](demo.py) reads the first two nonoverlapping 12-step windows, standardizes each sensor within its window, and builds one shared graph and one context-dependent graph per window. It then uses the standardized flow as single-channel node features to illustrate propagation. The script prints the difference between the two context-dependent graphs, intermediate values from both propagation branches, and the DGCSD output shape. A fixed seed sets the randomly initialized parameters. The demo ends at the intermediate features.
 
-## 代码可用性
+## Code Availability
 
-如果论文能够被录用，我们会在这里公开完整实现，否则只能回炉重造了 😂
+If the paper is accepted, we'll release the full implementation here. If not, we'll sleep on it and head back to the drawing board. 🌙😴
 
-代码采用 [Apache-2.0](LICENSE) 许可。
+The code is licensed under [Apache-2.0](LICENSE).
