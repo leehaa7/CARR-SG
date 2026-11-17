@@ -28,6 +28,7 @@ def load_pems04_windows(path: Path, batch_size: int, history_length: int) -> Ten
         if (fortran_order or len(shape) != 3 or shape[0] < length
                 or shape[1] != 307 or shape[2] < 1 or dtype.kind not in "fiu"):
             raise ValueError("Expected a row-major PEMS04 array with 307 sensors and a flow channel.")
+        #Read only the rows needed for the input windows
         byte_count = length * shape[1] * shape[2] * dtype.itemsize
         payload = stream.read(byte_count)
         if len(payload) != byte_count:
@@ -54,7 +55,7 @@ def main() -> None:
         mean = observed.mean(dim=-1, keepdim=True)
         variance = observed.var(dim=-1, unbiased=False, keepdim=True)
         observed = (observed - mean) / torch.sqrt(variance + 1e-5)
-        # Use the observed flow as a one-channel stand-in for backbone features.
+        #Use the observed flow as hidden features for this demo
         hidden = observed
 
     num_nodes, channels = observed.size(2), hidden.size(1)
@@ -78,6 +79,7 @@ def main() -> None:
     print(f"Context graph: {tuple(context_graph.shape)}")
     if args.pems04 is not None:
         context_change = (context_graph[0] - context_graph[1]).abs().sum(dim=-1).mean()
+        #Inspect the first propagation step in each branch
         reference = torch.matrix_power(shared_graph, convolution.smooth_depth)
         shared_features = torch.einsum("ij,bcjt->bcit", reference, hidden)
         complementary_features = hidden - shared_features
