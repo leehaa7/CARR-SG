@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+#SPDX-License-Identifier: Apache-2.0
 """Shared and context-dependent graph learning from the frozen PEMS implementation.
 
 The active graph constructor and its input preparation are extracted from
@@ -41,6 +41,7 @@ class DualGraphLearner(nn.Module):
 
     def get_static(self) -> Tensor:
         """Return the shared adjacency matrix with shape [N, N]."""
+        #The shared graph depends only on learned node embeddings
         node_index = torch.arange(self.num_nodes, device=self.embed1.weight.device)
         node_embedding = self.embed1(node_index)
         adjacency = F.relu(torch.mm(node_embedding, node_embedding.transpose(0, 1)))
@@ -59,6 +60,7 @@ class DualGraphLearner(nn.Module):
 
         node_index = torch.arange(nodes, device=self.embed1.weight.device)
         node_guidance = self.long_line(self.embed1(node_index))
+        #Apply temporal convolutions before splitting into patches
         deviation_features = self.short_conv(deviation)
         difference_features = self.diff_conv(differences)
         patch_shape = (batch, deviation_features.size(1), nodes, patch_count, self.patch_len)
@@ -67,6 +69,7 @@ class DualGraphLearner(nn.Module):
 
         deviation_embedding = torch.einsum("bcnpl,cld->bpnd", deviation_features, self.short_line)
         difference_embedding = torch.einsum("bcnpl,cld->bpnd", difference_features, self.diff_line)
+        #Use temporal differences to modulate shared node guidance
         context = self.norm_dynamic1(deviation_embedding + torch.sigmoid(difference_embedding) * node_guidance)
         similarities = torch.einsum("bpik,bpjk->bpij", context, context)
         adjacency = F.relu(similarities) + self.diag
@@ -86,6 +89,7 @@ class DualGraphLearner(nn.Module):
             raise ValueError("history_length must be positive and at most history.size(-1).")
 
         shared_graph = self.get_static()
+        #Measure deviations from the shared graph reference
         propagated = torch.einsum(
             "bckj,ik->bcij", history, torch.matrix_power(shared_graph, self.smooth_depth)
         )
