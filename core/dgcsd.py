@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+#SPDX-License-Identifier: Apache-2.0
 """Routed dual-graph convolution extracted from the frozen PEMS gcn_module.
 
 The standalone module exposes the routed path and its projection directly.
@@ -46,10 +46,12 @@ class DGCSD(nn.Module):
         if shared_graph.shape != (nodes, nodes) or context_graph.shape != (batch, nodes, nodes):
             raise ValueError("Expected shared_graph [N, N] and context_graph [B, N, N].")
 
+        #Split hidden features using the shared graph as a reference
         reference = torch.matrix_power(shared_graph, self.smooth_depth)
         shared = torch.einsum("bckj,ik->bcij", hidden, reference)
         complementary = hidden - shared
         depth_features = [hidden]
+        #Propagate each component with its own graph
         for _ in range(self.order):
             shared = _propagate(shared, shared_graph)
             complementary = _propagate(complementary, context_graph)
